@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Campings CV</string>
+
+    <!-- List -->
+    <string name="no_campings">No campings available</string>
+    <string name="menu_load_local">Load local data</string>
+    <string name="menu_load_remote">Load from web service</string>
+
+    <!-- Detail -->
+    <string name="section_location">Location</string>
+    <string name="section_contact">Contact</string>
+    <string name="label_capacity">Capacity</string>
+    <string name="capacity_places">%s places</string>
+    <string name="not_available">N/A</string>
+
+    <!-- Comments -->
+    <string name="section_comments">My Comments</string>
+    <string name="no_comments">No comments yet. Add your first comment!</string>
+    <string name="add_comment">Add Comment</string>
+    <string name="enter_comment">Enter your comment…</string>
+    <string name="delete_comment">Delete Comment</string>
+    <string name="delete_comment_confirm">Are you sure you want to delete this comment?</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+</resources>
