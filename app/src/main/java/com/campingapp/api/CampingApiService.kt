@@ -1,6 +1,7 @@
 package com.campingapp.api
 
 import com.campingapp.model.Camping
+import com.google.gson.annotations.SerializedName
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -18,6 +19,7 @@ interface CampingApiService {
 }
 
 data class CampingApiResponse(
-    val total_count: Int = 0,
+    @SerializedName("total_count")
+    val totalCount: Int = 0,
     val results: List<Camping> = emptyList()
 )

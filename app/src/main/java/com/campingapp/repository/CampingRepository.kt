@@ -33,7 +33,13 @@ class CampingRepository(private val context: Context) {
      * Fetches campings from the Generalitat Valenciana open data web service.
      */
     suspend fun getCampingsFromApi(): List<Camping> = withContext(Dispatchers.IO) {
-        RetrofitClient.apiService.getCampings().results
+        try {
+            RetrofitClient.apiService.getCampings().results
+        } catch (e: java.io.IOException) {
+            throw Exception("Network error: check your internet connection.", e)
+        } catch (e: Exception) {
+            throw Exception("Failed to load campings from web service.", e)
+        }
     }
 
     // ── Comments (Room) ───────────────────────────────────────────────────────
