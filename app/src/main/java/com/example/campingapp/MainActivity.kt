@@ -11,11 +11,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.campingapp.ui.theme.CampingAppTheme
 import org.json.JSONObject
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CampingsScreen(campings: List<Camping>) {
     Scaffold(
-        topBar = { SmallTopAppBar(title = { Text("Campings CV") }) }
+        topBar = { TopAppBar(title = { Text("Campings CV") }) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -105,19 +106,43 @@ fun CampingsScreen(campings: List<Camping>) {
 
 @Composable
 fun CampingItem(camping: Camping) {
+    val (backgroundColor, textColor) = getStarColors(camping.categoria)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(text = camping.nombre, style = MaterialTheme.typography.titleMedium)
+            Text(text = camping.nombre, style = MaterialTheme.typography.titleMedium, color = textColor)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "${camping.municipio} (${camping.provincia})", style = MaterialTheme.typography.bodyMedium)
+            Text(text = "${camping.municipio} (${camping.provincia})", style = MaterialTheme.typography.bodyMedium, color = textColor)
             if (camping.categoria.isNotBlank()) {
-                Text(text = camping.categoria, style = MaterialTheme.typography.bodySmall)
+                Text(text = camping.categoria.convertStarsToSymbols(), style = MaterialTheme.typography.bodySmall, color = textColor)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(text = "Plazas: ${camping.plazas}", style = MaterialTheme.typography.bodyMedium)
+            Text(text = "Plazas: ${camping.plazas}", style = MaterialTheme.typography.bodyMedium, color = textColor)
         }
     }
+}
+
+fun getStarColors(categoria: String): Pair<Color, Color> {
+    return when {
+        categoria.contains("CINCO ESTRELLAS") -> Pair(Color(0xFF08E710), Color(0xFFFFFFFF)) // Verde vibrante con blanco
+        categoria.contains("CUATRO ESTRELLAS") -> Pair(Color(0xFFABCB36), Color(0xFFFFFFFF)) // Púrpura-azul con blanco
+        categoria.contains("TRES ESTRELLAS") -> Pair(Color(0xFFF3D038), Color(0xFFFFFFFF)) // Púrpura-azul más oscuro con blanco
+        categoria.contains("DOS ESTRELLAS") -> Pair(Color(0xFFF55D2D), Color(0xFFFFFFFF)) // Naranja brillante con blanco
+        categoria.contains("UNA ESTRELLA") -> Pair(Color(0xFFFF0000), Color(0xFFFFFFFF)) // Rojo vibrante con blanco
+        categoria.contains("PERNOCTA") -> Pair(Color(0xFF9E9E9E), Color(0xFFFFFFFF)) // Gris con blanco
+        else -> Pair(Color(0xFF757575), Color(0xFFFFFFFF)) // Gris más oscuro con blanco
+    }
+}
+
+fun String.convertStarsToSymbols(): String {
+    return this
+        .replace("CINCO ESTRELLAS", "★★★★★")
+        .replace("CUATRO ESTRELLAS", "★★★★")
+        .replace("TRES ESTRELLAS", "★★★")
+        .replace("DOS ESTRELLAS", "★★")
+        .replace("UNA ESTRELLA", "★")
 }
