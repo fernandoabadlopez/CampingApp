@@ -7,14 +7,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -84,23 +80,156 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class SortOption {
+    NAME_ASC,
+    NAME_DESC,
+    PLAZAS_ASC,
+    PLAZAS_DESC,
+    CATEGORIA_ASC,
+    CATEGORIA_DESC
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CampingsScreen(campings: List<Camping>) {
+    var sortOption by remember { mutableStateOf(SortOption.NAME_ASC) }
+    var expanded by remember { mutableStateOf(false) }
+
+    val sortedCampings = remember(campings, sortOption) {
+        when (sortOption) {
+            SortOption.NAME_ASC -> campings.sortedBy { it.nombre.lowercase() }
+            SortOption.NAME_DESC -> campings.sortedByDescending { it.nombre.lowercase() }
+            SortOption.PLAZAS_ASC -> campings.sortedBy { it.plazas }
+            SortOption.PLAZAS_DESC -> campings.sortedByDescending { it.plazas }
+            SortOption.CATEGORIA_ASC -> campings.sortedBy { getCategoryValue(it.categoria) }
+            SortOption.CATEGORIA_DESC -> campings.sortedByDescending { getCategoryValue(it.categoria) }
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Campings CV") }) }
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxSize()
         ) {
-            items(campings) { camping ->
-                CampingItem(camping = camping)
+            // Controles de ordenamiento
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Ordenar por:",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Dropdown Menu para seleccionar ordenamiento
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { expanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(getSortOptionLabel(sortOption))
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                            }
+
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Nombre (A-Z)") },
+                                    onClick = {
+                                        sortOption = SortOption.NAME_ASC
+                                        expanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Nombre (Z-A)") },
+                                    onClick = {
+                                        sortOption = SortOption.NAME_DESC
+                                        expanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Plazas (↑)") },
+                                    onClick = {
+                                        sortOption = SortOption.PLAZAS_ASC
+                                        expanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Plazas (↓)") },
+                                    onClick = {
+                                        sortOption = SortOption.PLAZAS_DESC
+                                        expanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Categoría (↑)") },
+                                    onClick = {
+                                        sortOption = SortOption.CATEGORIA_ASC
+                                        expanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Categoría (↓)") },
+                                    onClick = {
+                                        sortOption = SortOption.CATEGORIA_DESC
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Lista de campings
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(sortedCampings) { camping ->
+                    CampingItem(camping = camping)
+                }
             }
         }
+    }
+}
+
+fun getSortOptionLabel(option: SortOption): String {
+    return when (option) {
+        SortOption.NAME_ASC -> "Nombre (A-Z)"
+        SortOption.NAME_DESC -> "Nombre (Z-A)"
+        SortOption.PLAZAS_ASC -> "Plazas (↑)"
+        SortOption.PLAZAS_DESC -> "Plazas (↓)"
+        SortOption.CATEGORIA_ASC -> "Categoría (↑)"
+        SortOption.CATEGORIA_DESC -> "Categoría (↓)"
+    }
+}
+
+fun getCategoryValue(categoria: String): Int {
+    return when {
+        categoria.contains("CINCO ESTRELLAS") -> 5
+        categoria.contains("CUATRO ESTRELLAS") -> 4
+        categoria.contains("TRES ESTRELLAS") -> 3
+        categoria.contains("DOS ESTRELLAS") -> 2
+        categoria.contains("UNA ESTRELLA") -> 1
+        categoria.contains("PERNOCTA") -> 0
+        else -> -1
     }
 }
 
