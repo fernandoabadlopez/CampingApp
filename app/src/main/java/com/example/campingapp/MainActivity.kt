@@ -238,18 +238,23 @@ fun CampingListScreen(campings: List<Camping>, navController: NavController) {
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 singleLine = true
             )
-            // Filtros con chips en LazyRow
+            // Filtros por categoría
+            Text(
+                text = "Categoría",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp)
+            )
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
                     FilterChip(
                         selected = selectedCategory == null,
                         onClick = { selectedCategory = null },
-                        label = { Text("Todas las categorías") }
+                        label = { Text("Todas") }
                     )
                 }
                 items(categories) { cat ->
@@ -259,11 +264,24 @@ fun CampingListScreen(campings: List<Camping>, navController: NavController) {
                         label = { Text(cat.convertStarsToSymbols()) }
                     )
                 }
+            }
+            // Filtros por provincia
+            Text(
+                text = "Provincia",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp)
+            )
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 item {
                     FilterChip(
                         selected = selectedProvince == null,
                         onClick = { selectedProvince = null },
-                        label = { Text("Todas las provincias") }
+                        label = { Text("Todas") }
                     )
                 }
                 items(provinces) { prov ->
@@ -273,12 +291,25 @@ fun CampingListScreen(campings: List<Camping>, navController: NavController) {
                         label = { Text(prov) }
                     )
                 }
-                if (types.isNotEmpty()) {
+            }
+            // Filtros por tipo de alojamiento (si existen)
+            if (types.isNotEmpty()) {
+                Text(
+                    text = "Tipo de alojamiento",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp)
+                )
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     item {
                         FilterChip(
                             selected = selectedType == null,
                             onClick = { selectedType = null },
-                            label = { Text("Todos los tipos") }
+                            label = { Text("Todos") }
                         )
                     }
                     items(types) { type ->
