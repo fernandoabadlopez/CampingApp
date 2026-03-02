@@ -133,7 +133,27 @@ fun CampingListScreen(campings: List<Camping>, navController: NavController) {
     var selectedProvince by remember { mutableStateOf<String?>(null) }
     var selectedType by remember { mutableStateOf<String?>(null) }
 
-    val categories = remember(campings) { campings.map { it.categoria }.distinct().sorted() }
+    // Ordenar categorías: 5, 4, 3, 2, 1 estrellas, luego Sin categoría, luego otras, luego PERNOCTA
+    val categories = remember(campings) {
+        val allCats = campings.map { it.categoria.ifBlank { "Sin categoría" } }.distinct()
+        val estrellas = listOf(
+            "CINCO ESTRELLAS",
+            "CUATRO ESTRELLAS",
+            "TRES ESTRELLAS",
+            "DOS ESTRELLAS",
+            "UNA ESTRELLA"
+        )
+        val pernocta = "PERNOCTA"
+        val sinCategoria = "Sin categoría"
+        val estrellasList = estrellas.filter { cat -> allCats.any { it.contains(cat) } }
+        val pernoctaList = if (allCats.any { it == pernocta }) listOf(pernocta) else emptyList()
+        val sinCategoriaList = if (allCats.any { it == sinCategoria }) listOf(sinCategoria) else emptyList()
+        val resto = allCats.filter { cat ->
+            cat !in estrellasList && cat != pernocta && cat != sinCategoria
+        }.sorted()
+        estrellasList + sinCategoriaList + resto + pernoctaList
+    }
+
     val provinces = remember(campings) { campings.map { it.provincia }.distinct().sorted() }
     val types = remember(campings) {
         campings.map {
