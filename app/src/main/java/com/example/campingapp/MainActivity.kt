@@ -1,19 +1,33 @@
 package com.example.campingapp
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.campingapp.ui.theme.CampingAppTheme
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -25,12 +39,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Si aquí crashea, la app se cerrará: por eso es clave que el parseo sea correcto
         val campings = getCampings()
 
         setContent {
             CampingAppTheme {
-                CampingsScreen(campings = campings)
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = "list"
+                ) {
+                    composable("list") {
+                        CampingListScreen(
+                            campings = campings,
+                            navController = navController
+                        )
+                    }
+                    composable(
+                        "detail/{campingId}",
+                        arguments = listOf(navArgument("campingId") { type = NavType.IntType })
+                    ) { backStackEntry ->
+                        val campingId = backStackEntry.arguments?.getInt("campingId") ?: -1
+                        val camping = campings.find { it.id == campingId }
+                        camping?.let {
+                            CampingDetailScreen(camping = it, navController = navController)
+                        }
+                    }
+                }
             }
         }
     }
@@ -91,133 +125,187 @@ enum class SortOption {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CampingsScreen(campings: List<Camping>) {
+fun CampingListScreen(campings: List<Camping>, navController: NavController) {
     var sortOption by remember { mutableStateOf(SortOption.NAME_ASC) }
-    var expanded by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var searchText by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedProvince by remember { mutableStateOf<String?>(null) }
+    var selectedType by remember { mutableStateOf<String?>(null) }
 
-    val sortedCampings = remember(campings, sortOption) {
+    val categories = remember(campings) { campings.map { it.categoria }.distinct().sorted() }
+    val provinces = remember(campings) { campings.map { it.provincia }.distinct().sorted() }
+    val types = remember(campings) {
+        campings.map {
+            val parts = it.categoria.split("-")
+            if (parts.size > 1) parts[1].trim() else null
+        }.filterNotNull().distinct().sorted()
+    }
+
+    val filteredCampings = campings.filter { camping ->
+        val matchesSearch = searchText.isBlank() ||
+            camping.nombre.contains(searchText, ignoreCase = true) ||
+            camping.municipio.contains(searchText, ignoreCase = true) ||
+            camping.provincia.contains(searchText, ignoreCase = true)
+        val matchesCategory = selectedCategory == null || camping.categoria == selectedCategory
+        val matchesProvince = selectedProvince == null || camping.provincia == selectedProvince
+        val matchesType = selectedType == null || (camping.categoria.split("-").getOrNull(1)?.trim() == selectedType)
+        matchesSearch && matchesCategory && matchesProvince && matchesType
+    }
+
+    val sortedCampings = remember(filteredCampings, sortOption) {
         when (sortOption) {
-            SortOption.NAME_ASC -> campings.sortedBy { it.nombre.lowercase() }
-            SortOption.NAME_DESC -> campings.sortedByDescending { it.nombre.lowercase() }
-            SortOption.PLAZAS_ASC -> campings.sortedBy { it.plazas }
-            SortOption.PLAZAS_DESC -> campings.sortedByDescending { it.plazas }
-            SortOption.CATEGORIA_ASC -> campings.sortedBy { getCategoryValue(it.categoria) }
-            SortOption.CATEGORIA_DESC -> campings.sortedByDescending { getCategoryValue(it.categoria) }
+            SortOption.NAME_ASC -> filteredCampings.sortedBy { it.nombre.lowercase() }
+            SortOption.NAME_DESC -> filteredCampings.sortedByDescending { it.nombre.lowercase() }
+            SortOption.PLAZAS_ASC -> filteredCampings.sortedBy { it.plazas }
+            SortOption.PLAZAS_DESC -> filteredCampings.sortedByDescending { it.plazas }
+            SortOption.CATEGORIA_ASC -> filteredCampings.sortedBy { getCategoryValue(it.categoria) }
+            SortOption.CATEGORIA_DESC -> filteredCampings.sortedByDescending { getCategoryValue(it.categoria) }
         }
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Campings CV") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Campings CV") },
+                actions = {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Menú")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Nombre (A-Z)") },
+                            onClick = {
+                                sortOption = SortOption.NAME_ASC
+                                menuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Nombre (Z-A)") },
+                            onClick = {
+                                sortOption = SortOption.NAME_DESC
+                                menuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Plazas (↑)") },
+                            onClick = {
+                                sortOption = SortOption.PLAZAS_ASC
+                                menuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Plazas (↓)") },
+                            onClick = {
+                                sortOption = SortOption.PLAZAS_DESC
+                                menuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Categoría (↑)") },
+                            onClick = {
+                                sortOption = SortOption.CATEGORIA_ASC
+                                menuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Categoría (↓)") },
+                            onClick = {
+                                sortOption = SortOption.CATEGORIA_DESC
+                                menuExpanded = false
+                            }
+                        )
+                    }
+                }
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Controles de ordenamiento
-            Card(
+            // Barra de búsqueda
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { searchText = it },
+                label = { Text("Buscar camping, municipio o provincia") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                singleLine = true
+            )
+            // Filtros con chips en LazyRow
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Ordenar por:",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                item {
+                    FilterChip(
+                        selected = selectedCategory == null,
+                        onClick = { selectedCategory = null },
+                        label = { Text("Todas las categorías") }
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Dropdown Menu para seleccionar ordenamiento
-                        Box(modifier = Modifier.weight(1f)) {
-                            OutlinedButton(
-                                onClick = { expanded = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(getSortOptionLabel(sortOption))
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                            }
-
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Nombre (A-Z)") },
-                                    onClick = {
-                                        sortOption = SortOption.NAME_ASC
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Nombre (Z-A)") },
-                                    onClick = {
-                                        sortOption = SortOption.NAME_DESC
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Plazas (↑)") },
-                                    onClick = {
-                                        sortOption = SortOption.PLAZAS_ASC
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Plazas (↓)") },
-                                    onClick = {
-                                        sortOption = SortOption.PLAZAS_DESC
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Categoría (↑)") },
-                                    onClick = {
-                                        sortOption = SortOption.CATEGORIA_ASC
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Categoría (↓)") },
-                                    onClick = {
-                                        sortOption = SortOption.CATEGORIA_DESC
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
+                }
+                items(categories) { cat ->
+                    FilterChip(
+                        selected = selectedCategory == cat,
+                        onClick = { selectedCategory = if (selectedCategory == cat) null else cat },
+                        label = { Text(cat.convertStarsToSymbols()) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedProvince == null,
+                        onClick = { selectedProvince = null },
+                        label = { Text("Todas las provincias") }
+                    )
+                }
+                items(provinces) { prov ->
+                    FilterChip(
+                        selected = selectedProvince == prov,
+                        onClick = { selectedProvince = if (selectedProvince == prov) null else prov },
+                        label = { Text(prov) }
+                    )
+                }
+                if (types.isNotEmpty()) {
+                    item {
+                        FilterChip(
+                            selected = selectedType == null,
+                            onClick = { selectedType = null },
+                            label = { Text("Todos los tipos") }
+                        )
+                    }
+                    items(types) { type ->
+                        FilterChip(
+                            selected = selectedType == type,
+                            onClick = { selectedType = if (selectedType == type) null else type },
+                            label = { Text(type) }
+                        )
                     }
                 }
             }
-
-            // Lista de campings
+            // Lista de campings limpia
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(sortedCampings) { camping ->
-                    CampingItem(camping = camping)
+                    CampingItem(
+                        camping = camping,
+                        onClick = {
+                            navController.navigate("detail/${camping.id}")
+                        }
+                    )
                 }
             }
         }
-    }
-}
-
-fun getSortOptionLabel(option: SortOption): String {
-    return when (option) {
-        SortOption.NAME_ASC -> "Nombre (A-Z)"
-        SortOption.NAME_DESC -> "Nombre (Z-A)"
-        SortOption.PLAZAS_ASC -> "Plazas (↑)"
-        SortOption.PLAZAS_DESC -> "Plazas (↓)"
-        SortOption.CATEGORIA_ASC -> "Categoría (↑)"
-        SortOption.CATEGORIA_DESC -> "Categoría (↓)"
     }
 }
 
@@ -234,11 +322,14 @@ fun getCategoryValue(categoria: String): Int {
 }
 
 @Composable
-fun CampingItem(camping: Camping) {
+fun CampingItem( camping: Camping,
+                 onClick: () -> Unit) {
     val (backgroundColor, textColor) = getStarColors(camping.categoria)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
@@ -274,4 +365,159 @@ fun String.convertStarsToSymbols(): String {
         .replace("TRES ESTRELLAS", "★★★")
         .replace("DOS ESTRELLAS", "★★")
         .replace("UNA ESTRELLA", "★")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CampingDetailScreen(camping: Camping, navController: NavController) {
+    val (backgroundColor, textColor) = getStarColors(camping.categoria)
+    val context = LocalContext.current
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(camping.nombre) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Menú")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        // Opción: Abrir en Maps
+                        DropdownMenuItem(
+                            text = { Text("📍 Ver en Maps") },
+                            onClick = {
+                                val geoUri = Uri.parse("geo:0,0?q=${Uri.encode("${camping.nombre}, ${camping.municipio}, ${camping.provincia}")}")
+                                val intent = Intent(Intent.ACTION_VIEW, geoUri)
+                                context.startActivity(intent)
+                                menuExpanded = false
+                            }
+                        )
+
+                        // Opción: Abrir sitio web (solo si existe)
+                        if (camping.web.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("🌐 Abrir sitio web") },
+                                onClick = {
+                                    val webUrl = if (camping.web.startsWith("http")) {
+                                        camping.web
+                                    } else {
+                                        "http://${camping.web}"
+                                    }
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(webUrl))
+                                    context.startActivity(intent)
+                                    menuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Card con información de categoría
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = backgroundColor),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        camping.nombre,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = textColor
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        camping.categoria.convertStarsToSymbols(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = textColor
+                    )
+                }
+            }
+
+            // Card con información general
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Información General",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    DetalleItem("📍 Municipio", camping.municipio)
+                    DetalleItem("🏛️ Provincia", camping.provincia)
+                    DetalleItem("🛣️ Dirección", camping.direccion)
+                    DetalleItem("👥 Plazas", camping.plazas.toString())
+                }
+            }
+
+            // Card con contacto si existe
+            if (camping.web.isNotEmpty() || camping.email.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Contacto",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (camping.web.isNotEmpty()) {
+                            DetalleItem("🌐 Web", camping.web)
+                        }
+                        if (camping.email.isNotEmpty()) {
+                            DetalleItem("📧 Email", camping.email)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun DetalleItem(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+    }
 }
