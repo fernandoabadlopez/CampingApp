@@ -21,10 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -160,12 +157,14 @@ class MainActivity : ComponentActivity() {
                 val favorites by viewModel.allFavorites.collectAsState()
 
                 var isLoading by remember { mutableStateOf(true) }
+                var usingRealLocations by remember { mutableStateOf(false) }
                 var campings by remember { mutableStateOf<List<Camping>>(emptyList()) }
 
+                // --- LÓGICA DE CARGA PRO (INTERNET + GEOCODER REAL) ---
                 LaunchedEffect(Unit) {
                     try {
                         val response = withContext(Dispatchers.IO) { campingApiService.getCampings() }
-                        campings = response.result.records.map { net ->
+                        val networkCampings = response.result.records.map { net ->
                             Camping(
                                 id = net.id,
                                 nombre = net.nombre,
@@ -178,8 +177,34 @@ class MainActivity : ComponentActivity() {
                                 email = net.email ?: ""
                             )
                         }
+
+                        // --- PROCESO DE GEOCODIFICACIÓN REAL ---
+                        withContext(Dispatchers.IO) {
+                            val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+                            networkCampings.forEach { camping ->
+                                try {
+                                    val addresses = geocoder.getFromLocationName(
+                                        "${camping.nombre}, ${camping.municipio}, España", 1
+                                    )
+                                    if (!addresses.isNullOrEmpty()) {
+                                        camping.latitude = addresses[0].latitude
+                                        camping.longitude = addresses[0].longitude
+                                        usingRealLocations = true
+                                    } else {
+                                        // Backup aproximado si no encuentra dirección específica
+                                        camping.latitude = 39.4699 + (Math.random() * 0.1)
+                                        camping.longitude = -0.3774 + (Math.random() * 0.1)
+                                    }
+                                    kotlinx.coroutines.delay(10)
+                                } catch (e: Exception) {
+                                    camping.latitude = 39.4699 + (Math.random() * 0.1)
+                                    camping.longitude = -0.3774 + (Math.random() * 0.1)
+                                }
+                            }
+                        }
+                        campings = networkCampings
                     } catch (e: Exception) {
-                        Log.e("CAMPING_ERROR", "Fallo al descargar: ${e.message}")
+                        Log.e("CAMPING_APP", "Error: ${e.message}")
                     } finally {
                         isLoading = false
                     }
@@ -191,7 +216,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     NavHost(navController = navController, startDestination = "list") {
                         composable("list") {
-                            CampingListScreen(campings, favorites, viewModel, navController)
+                            CampingListScreen(campings, favorites, viewModel, navController, usingRealLocations)
                         }
                         composable(
                             "detail/{campingId}",
@@ -224,7 +249,6 @@ fun SplashScreen() {
     }
 }
 
-// --- ENUMERACIÓN DE FILTROS ACTUALIZADA ---
 enum class SortOption {
     NAME_ASC, NAME_DESC, PLAZAS_ASC, PLAZAS_DESC, CATEGORIA_ASC, CATEGORIA_DESC, DISTANCE_ASC
 }
@@ -235,7 +259,8 @@ fun CampingListScreen(
     campings: List<Camping>,
     favorites: List<FavoriteEntity>,
     viewModel: FavoriteViewModel,
-    navController: NavController
+    navController: NavController,
+    usingRealLocations: Boolean
 ) {
     val context = LocalContext.current
     var sortOption by rememberSaveable { mutableStateOf(SortOption.NAME_ASC) }
@@ -266,13 +291,11 @@ fun CampingListScreen(
             isCalculatingDistances = true
             withContext(Dispatchers.IO) {
                 campings.forEach { camping ->
-                    if (camping.latitude == null) {
-                        camping.latitude = 39.4699 + (Math.random() * 1.5 - 0.75)
-                        camping.longitude = -0.3774 + (Math.random() * 1.5 - 0.75)
+                    if (camping.latitude != null && camping.longitude != null) {
+                        val results = FloatArray(1)
+                        Location.distanceBetween(loc.latitude, loc.longitude, camping.latitude!!, camping.longitude!!, results)
+                        camping.distanceToUser = results[0]
                     }
-                    val results = FloatArray(1)
-                    Location.distanceBetween(loc.latitude, loc.longitude, camping.latitude!!, camping.longitude!!, results)
-                    camping.distanceToUser = results[0]
                 }
                 withContext(Dispatchers.Main) { distancesReady = !distancesReady; isCalculatingDistances = false }
             }
@@ -290,13 +313,12 @@ fun CampingListScreen(
     val provinces = remember(campings) { campings.map { it.provincia }.distinct().sorted() }
 
     val filteredCampings = campings.filter { camping ->
-        val matchesSearch = searchText.isBlank() || camping.nombre.contains(searchText, true) || camping.municipio.contains(searchText, true)
+        val matchesSearch = searchText.isBlank() || camping.nombre.contains(searchText, true) || camping.municipio.contains(searchText, true) || camping.provincia.contains(searchText, true)
         val matchesCategory = selectedCategory == null || camping.categoria == selectedCategory
         val matchesProvince = selectedProvince == null || camping.provincia == selectedProvince
         matchesSearch && matchesCategory && matchesProvince
     }
 
-    // --- LÓGICA DE ORDENACIÓN COMPLETA ---
     val sortedCampings = remember(filteredCampings, sortOption, distancesReady) {
         when (sortOption) {
             SortOption.NAME_ASC -> filteredCampings.sortedBy { it.nombre.lowercase() }
@@ -314,6 +336,13 @@ fun CampingListScreen(
             TopAppBar(
                 title = { Text("Campings CV") },
                 actions = {
+                    Text(
+                        text = if (usingRealLocations) "Ubicaciones reales" else "Ubicaciones aprox.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (usingRealLocations) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+
                     if (isCalculatingDistances) CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 2.dp)
                     IconButton(onClick = { permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }) { Icon(Icons.Default.LocationOn, "GPS") }
                     IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "Menú") }
@@ -321,13 +350,13 @@ fun CampingListScreen(
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(text = { Text("Nombre (A-Z)") }, onClick = { sortOption = SortOption.NAME_ASC; menuExpanded = false })
                         DropdownMenuItem(text = { Text("Nombre (Z-A)") }, onClick = { sortOption = SortOption.NAME_DESC; menuExpanded = false })
-                        Divider()
+                        HorizontalDivider()
                         DropdownMenuItem(text = { Text("Plazas (Más plazas ↓)") }, onClick = { sortOption = SortOption.PLAZAS_DESC; menuExpanded = false })
                         DropdownMenuItem(text = { Text("Plazas (Menos plazas ↑)") }, onClick = { sortOption = SortOption.PLAZAS_ASC; menuExpanded = false })
-                        Divider()
-                        DropdownMenuItem(text = { Text("Calidad (Mayor calidad)") }, onClick = { sortOption = SortOption.CATEGORIA_DESC; menuExpanded = false })
-                        DropdownMenuItem(text = { Text("Calidad (Menor calidad)") }, onClick = { sortOption = SortOption.CATEGORIA_ASC; menuExpanded = false })
-                        Divider()
+                        HorizontalDivider()
+                        DropdownMenuItem(text = { Text("Categoría (Mejor calidad ★)") }, onClick = { sortOption = SortOption.CATEGORIA_DESC; menuExpanded = false })
+                        DropdownMenuItem(text = { Text("Categoría (Menos estrellas)") }, onClick = { sortOption = SortOption.CATEGORIA_ASC; menuExpanded = false })
+                        HorizontalDivider()
                         if (userLocation != null || distancesReady) {
                             DropdownMenuItem(text = { Text("Distancia (Más cercanos 📍)") }, onClick = { sortOption = SortOption.DISTANCE_ASC; menuExpanded = false })
                         }
@@ -342,8 +371,14 @@ fun CampingListScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            OutlinedTextField(value = searchText, onValueChange = { searchText = it }, label = { Text("Buscar camping, municipio o provincia") }, modifier = Modifier.fillMaxWidth().padding(8.dp), singleLine = true)
-            Text(text = "Categoría", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+            OutlinedTextField(
+                value = searchText, onValueChange = { searchText = it },
+                label = { Text("Buscar camping, municipio o provincia") },
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, null) }
+            )
+            Text(text = "Categoría", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 16.dp, top = 4.dp))
             LazyRow(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FilterChip(selected = selectedCategory == null, onClick = { selectedCategory = null }, label = { Text("Todas") }) }
                 items(categories) { cat -> FilterChip(selected = selectedCategory == cat, onClick = { selectedCategory = if (selectedCategory == cat) null else cat }, label = { Text(cat.convertStarsToSymbols()) }) }
@@ -380,13 +415,14 @@ fun CampingItem(camping: Camping, isFavorite: Boolean, onCardClick: () -> Unit, 
     val (backgroundColor, textColor) = getStarColors(camping.categoria)
     Card(modifier = Modifier.fillMaxWidth().clickable { onCardClick() }, elevation = CardDefaults.cardElevation(4.dp), colors = CardDefaults.cardColors(containerColor = backgroundColor)) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp).padding(end = 32.dp)) {
+            Column(modifier = Modifier.padding(16.dp).padding(end = 40.dp)) {
                 Text(text = camping.nombre, style = MaterialTheme.typography.titleMedium, color = textColor)
                 Text(text = "${camping.municipio} (${camping.provincia})", style = MaterialTheme.typography.bodyMedium, color = textColor)
                 Text(text = camping.categoria.convertStarsToSymbols(), style = MaterialTheme.typography.bodySmall, color = textColor)
                 Text(text = "Plazas: ${camping.plazas}", style = MaterialTheme.typography.bodyMedium, color = textColor)
                 if (camping.distanceToUser != null) {
-                    Text(text = "📍 A ${String.format("%.1f", camping.distanceToUser!!/1000)} km", style = MaterialTheme.typography.bodySmall, color = textColor)
+                    val km = camping.distanceToUser!! / 1000
+                    Text(text = "📍 A ${String.format("%.1f", km)} km", style = MaterialTheme.typography.labelSmall, color = textColor)
                 }
             }
             IconButton(onClick = onFavoriteToggle, modifier = Modifier.align(Alignment.TopEnd)) {
@@ -402,6 +438,7 @@ fun getStarColors(categoria: String): Pair<Color, Color> {
         categoria.contains("CUATRO ESTRELLAS") -> Pair(Color(0xFFABCB36), Color.White)
         categoria.contains("TRES ESTRELLAS") -> Pair(Color(0xFFF3D038), Color.White)
         categoria.contains("DOS ESTRELLAS") -> Pair(Color(0xFFF55D2D), Color.White)
+        // ROJO CORAL CLARITO PARA UNA ESTRELLA
         categoria.contains("UNA ESTRELLA") -> Pair(Color(0xFFFF8A80), Color.White)
         else -> Pair(Color(0xFF757575), Color.White)
     }
