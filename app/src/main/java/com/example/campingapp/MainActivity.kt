@@ -307,7 +307,7 @@ fun CampingListScreen(
         val estrellas = listOf("CINCO ESTRELLAS", "CUATRO ESTRELLAS", "TRES ESTRELLAS", "DOS ESTRELLAS", "UNA ESTRELLA")
         val estrellasList = estrellas.filter { cat -> allCats.any { it.contains(cat) } }
         val resto = allCats.filter { cat -> cat !in estrellasList && cat != "PERNOCTA" && cat != "Sin categoría" }.sorted()
-        estrellasList + listOf("Sin categoría") + resto + listOf("PERNOCTA")
+        estrellasList + resto
     }
 
     val provinces = remember(campings) { campings.map { it.provincia }.distinct().sorted() }
