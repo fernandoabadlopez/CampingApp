@@ -55,7 +55,7 @@ val retrofit = retrofit2.Retrofit.Builder()
 
 val campingApiService = retrofit.create(CampingApiService::class.java)
 
-/* --- TU CÓDIGO DE LA SESIÓN 2 (MANTENIDO) ---
+/* --- CÓDIGO DE LA SESIÓN 2 ---
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -471,6 +471,19 @@ fun CampingDetailScreen(camping: Camping, navController: NavController, viewMode
                     DetalleItem("🛣️ Dirección", camping.direccion)
                     DetalleItem("👥 Plazas", camping.plazas.toString())
                     Button(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode("${camping.nombre}, ${camping.municipio}")}"))) }, Modifier.padding(top = 16.dp)) { Text("Ver en Google Maps") }
+                    Button(
+                        onClick = {
+                            camping.web.takeIf { it.isNotBlank() }?.let { url ->
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            }
+                        },
+                        modifier = Modifier.padding(top = 8.dp),
+                        enabled = camping.web.isNotBlank()
+                    ) {
+                        Text("Visitar web")
+                    }
+
                 }
             }
         }
